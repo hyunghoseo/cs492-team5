@@ -8,8 +8,9 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <errno.h>	
+#include <errno.h>
 
+// Declare mutex and condition variables
 pthread_mutex_t queue_mutex;
 pthread_cond_t condc, condp;
 
@@ -26,47 +27,44 @@ int max_num_prod;
 
 int quantum;
 
+// Struct for the product
 typedef struct Product {
     int prod_id, life;
-    double time_stamp;
+    double create_time, wait_time, insert_time;
 } product;
 
+// Declare the queue as an array of products
 product *prod_queue;
 
+// Variables to track stats for turn-around times and wait times
+double min_turn=100000, max_turn=0, total_turn=0,
+       min_wait=100000, max_wait=0, total_wait=0;
+
+// The Fibonacchi function
 int fn(int n)
 {
-    if (n <= 1)      
+    if (n <= 1)
         return n;
     return fn(n-1) + fn(n-2);
 }
 
+// Function to retrieve the time stamp
 double getTimeStamp() {
-    struct timeval  tv;
+    struct timeval tv;
     gettimeofday(&tv, NULL);
     double time_in_mill =
-        (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000 ; // convert tv_sec & tv_usec to millisecond
+        (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000.0;
     return time_in_mill;
 }
 
-int queueIsEmpty() {
-    return queue_size == 0;
-}
-
-int queueIsFull() {
-    printf("QUEUE: %d/%d\n", queue_size, queue_capacity);
-    return queue_size == queue_capacity;
-}
-
+// Function to insert product into the rear of the queue
 void insertProd(product my_prod) {
-    if (queueIsFull()) {
-        printf("Trying to insert when queue is full.");
-        return;
-    }
     queue_rear = (queue_rear + 1)%queue_capacity;
     prod_queue[queue_rear] = my_prod;
     queue_size++;
 }
 
+// Function to remove a product from the front of the queue and return it
 product removeProd() {
     product my_prod = prod_queue[queue_front];
     queue_front = (queue_front + 1)%queue_capacity;
@@ -74,12 +72,14 @@ product removeProd() {
     return my_prod;
 }
 
+// Function to create a product and return it
 product createProd() {
     product my_prod;
     
     my_prod.prod_id = num_produced+1;
-    my_prod.time_stamp = getTimeStamp();
     my_prod.life = random()%1024;
+    my_prod.create_time = my_prod.insert_time = getTimeStamp();
+    my_prod.wait_time = 0;
 
     return my_prod;
 }
@@ -135,6 +135,8 @@ int main(int argc, char* argv[]) {
     void *producer();
     void *consumer();
 
+    double start_time = getTimeStamp();
+
     // Create the producer/consumer threads
     for (i = 0; i < num_pro; i++) {
         pn[i] = i+1;
@@ -149,10 +151,40 @@ int main(int argc, char* argv[]) {
     for (i = 0; i < num_pro; i++) {
         pthread_join(pro_thread[i],NULL);
     }
-    printf("THE PRODUCERS HAVE FINISHED.\n");
+    double pro_end_time = getTimeStamp();
     for (i = 0; i < num_con; i++) {
         pthread_join(con_thread[i],NULL);
     }
+
+    double total_time = getTimeStamp() - start_time;
+
+    printf("\n----------------\
+            \nINPUT PARAMETERS\
+            \n----------------\n");
+    printf("# Producers: %d\n", num_pro);
+    printf("# Consumers: %d\n", num_con);
+    printf("# Products: %d\n", max_num_prod);
+    printf("Queue Size: %d\n", queue_capacity);
+    printf("Scheduling: ");
+    if (sched_alg == 0) printf("FCFS\n");
+    else printf("RR (Q: %d)\n", quantum);
+
+    printf("\n----------------------------------\
+            \n       PERFORMANCE ANALYSIS       \
+            \n----------------------------------\n");
+
+    printf("       Total Time  %f\n\n", total_time);
+
+    printf("Turn-around Times  MIN: %f\n", min_turn);
+    printf("                   MAX: %f\n", max_turn);
+    printf("                   AVG: %f\n\n", total_turn/max_num_prod);
+
+    printf("       Wait Times  MIN: %f\n", min_wait);
+    printf("                   MAX: %f\n", max_wait);
+    printf("                   AVG: %f\n\n", total_wait/max_num_prod);
+
+    printf("Producer Throughput: %f\n", max_num_prod/((pro_end_time - start_time)/60000));
+    printf("Consumer Throughput: %f\n\n", max_num_prod/(total_time/60000));
 
     // Destroy the mutex and condition variables
     pthread_mutex_destroy(&queue_mutex);
@@ -164,9 +196,10 @@ int main(int argc, char* argv[]) {
 
 void *producer(int *id) {
     while (num_produced < max_num_prod) {
+        // Lock the buffer
         pthread_mutex_lock(&queue_mutex);
         
-        while (queueIsFull())
+        while (queue_size == queue_capacity && num_produced < max_num_prod)
             pthread_cond_wait(&condp, &queue_mutex);
 
         if (num_produced < max_num_prod) {
@@ -177,11 +210,9 @@ void *producer(int *id) {
         }
         
         // Wake up a consumer
-        pthread_cond_signal(&condc);
-
+        pthread_cond_broadcast(&condc);
         // Release the buffer
         pthread_mutex_unlock(&queue_mutex);
-
         // Sleep for 100 milliseconds
         usleep(100000);
     }
@@ -194,9 +225,10 @@ void *consumer(int *id) {
     while (num_consumed < max_num_prod) {
         pthread_mutex_lock(&queue_mutex);
         
-        while (queueIsEmpty())
+        while (queue_size == 0 && num_consumed < max_num_prod)
             pthread_cond_wait(&condc, &queue_mutex);
 
+        double remove_time = getTimeStamp();
         product removed_prod = removeProd();
 
         if (num_consumed < max_num_prod) {
@@ -204,6 +236,10 @@ void *consumer(int *id) {
                 removed_prod.life = removed_prod.life - quantum;
                 for (i = quantum; i > 0; i--)
                     fn(10);
+
+                // Update the product's wait_time and insert_time
+                removed_prod.wait_time += remove_time - removed_prod.insert_time;
+                removed_prod.insert_time = getTimeStamp();
 
                 insertProd(removed_prod);
             }
@@ -213,12 +249,27 @@ void *consumer(int *id) {
                 
                 num_consumed++;
 
+                // Update the product's wait_time
+                removed_prod.wait_time += remove_time - removed_prod.insert_time;
+                // Determine the product's turn-around time
+                double turn_time = getTimeStamp() - removed_prod.create_time;
+
+                // Update wait time stats
+                if (removed_prod.wait_time < min_wait) min_wait = removed_prod.wait_time;
+                if (removed_prod.wait_time > max_wait) max_wait = removed_prod.wait_time;
+                total_wait += removed_prod.wait_time;
+
+                // Update turn-around time stats
+                if (turn_time < min_turn) min_turn = turn_time;
+                if (turn_time > max_turn) max_turn = turn_time;
+                total_turn += turn_time;
+
                 printf("Consumer %d has consumed product %d.\n", *id, removed_prod.prod_id);
             }
         }
         
         // Wake up a producer
-        pthread_cond_signal(&condp);
+        pthread_cond_broadcast(&condp);
 
         pthread_mutex_unlock(&queue_mutex);
 
