@@ -26,12 +26,12 @@ int max_num_prod;
 
 int quantum;
 
-struct product {
+typedef struct Product {
     int prod_id, life;
     double time_stamp;
-};
+} product;
 
-struct product *prod_queue;
+product *prod_queue;
 
 int fn(int n)
 {
@@ -57,7 +57,7 @@ int queueIsFull() {
     return queue_size == queue_capacity;
 }
 
-void insertProd(struct product my_prod) {
+void insertProd(product my_prod) {
     if (queueIsFull()) {
         printf("Trying to insert when queue is full.");
         return;
@@ -67,15 +67,15 @@ void insertProd(struct product my_prod) {
     queue_size++;
 }
 
-struct product removeProd() {
-    struct product my_prod = prod_queue[queue_front];
+product removeProd() {
+    product my_prod = prod_queue[queue_front];
     queue_front = (queue_front + 1)%queue_capacity;
     queue_size--;
     return my_prod;
 }
 
-struct product createProd() {
-    struct product my_prod;
+product createProd() {
+    product my_prod;
     
     my_prod.prod_id = num_produced+1;
     my_prod.time_stamp = getTimeStamp();
@@ -110,7 +110,7 @@ int main(int argc, char* argv[]) {
     int seed = atoi(argv[7]);
     
     // Initialize the queue
-    prod_queue = malloc(sizeof(struct product)*queue_capacity);
+    prod_queue = malloc(sizeof(product)*queue_capacity);
 
     // If scheduling algorithm is FCFS, set quantum to 1024
     if (sched_alg == 0)
@@ -170,7 +170,7 @@ void *producer(int *id) {
             pthread_cond_wait(&condp, &queue_mutex);
 
         if (num_produced < max_num_prod) {
-            struct product new_prod = createProd();
+            product new_prod = createProd();
             insertProd(new_prod);
             num_produced++;
             printf("Producer %d has produced product %d.\n", *id, new_prod.prod_id);
@@ -197,7 +197,7 @@ void *consumer(int *id) {
         while (queueIsEmpty())
             pthread_cond_wait(&condc, &queue_mutex);
 
-        struct product removed_prod = removeProd();
+        product removed_prod = removeProd();
 
         if (num_consumed < max_num_prod) {
             if (removed_prod.life > quantum) {
