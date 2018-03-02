@@ -21,11 +21,11 @@ int queue_front = 0;
 int queue_rear = -1;
 
 // Variables to keep track of number of products produced/consumed
-int num_produced = 0;
-int num_consumed = 0;
+int num_produced = 0; // number of products produced
+int num_consumed = 0; // number of products consumed
 int max_num_prod;
 
-int quantum;
+int quantum; // The quantum for the round robin scheduling algorithm
 
 // Struct for the product
 typedef struct Product {
@@ -112,7 +112,9 @@ int main(int argc, char* argv[]) {
     // Initialize the queue
     prod_queue = malloc(sizeof(product)*queue_capacity);
 
-    // If scheduling algorithm is FCFS, set quantum to 1024
+    // If scheduling algorithm is FCFS, set quantum to 1024,
+    // which will allow the RR algorithm to act as FCFS since 1024
+    // is greater than the life of any product
     if (sched_alg == 0)
         quantum = 1024;
 
@@ -132,9 +134,11 @@ int main(int argc, char* argv[]) {
     int pn[num_pro];
     int cn[num_con];
 
+    // Declare producer/consumer functions
     void *producer();
     void *consumer();
 
+    // Save the start time
     double start_time = getTimeStamp();
 
     // Create the producer/consumer threads
@@ -147,17 +151,23 @@ int main(int argc, char* argv[]) {
         pthread_create(&con_thread[i],NULL,consumer,&cn[i]);   
     }
     
-    // Join the threads
+    // Join the producer threads
     for (i = 0; i < num_pro; i++) {
         pthread_join(pro_thread[i],NULL);
     }
+
+    // Save the end time for the producer threads
     double pro_end_time = getTimeStamp();
+
+    // Join the consumer threads
     for (i = 0; i < num_con; i++) {
         pthread_join(con_thread[i],NULL);
     }
 
+    // Determine the total time
     double total_time = getTimeStamp() - start_time;
 
+    // Print out the input parameters
     printf("\n----------------\
             \nINPUT PARAMETERS\
             \n----------------\n");
@@ -169,6 +179,7 @@ int main(int argc, char* argv[]) {
     if (sched_alg == 0) printf("FCFS\n");
     else printf("RR (Q: %d)\n", quantum);
 
+    // Print out the time metrics
     printf("\n----------------------------------\
             \n       PERFORMANCE ANALYSIS       \
             \n----------------------------------\n");
@@ -195,26 +206,27 @@ int main(int argc, char* argv[]) {
 }
 
 void *producer(int *id) {
+    // Keep producing until the max number of products has been produced
     while (num_produced < max_num_prod) {
-        // Lock the buffer
-        pthread_mutex_lock(&queue_mutex);
+        pthread_mutex_lock(&queue_mutex); // Lock the buffer
         
+        // Hold the thread while the queue is full
         while (queue_size == queue_capacity && num_produced < max_num_prod)
+            // Wait on the condition variable condp, which will be signalled
+            // once a product has been removed from the queue
             pthread_cond_wait(&condp, &queue_mutex);
 
+        // Check again whether the product goal has been reached before creating a product
         if (num_produced < max_num_prod) {
-            product new_prod = createProd();
-            insertProd(new_prod);
-            num_produced++;
+            product new_prod = createProd(); // Create a product
+            insertProd(new_prod); // Insert the product into the queue
+            num_produced++; // Increment the number of products produced
             printf("Producer %d has produced product %d.\n", *id, new_prod.prod_id);
         }
         
-        // Wake up a consumer
-        pthread_cond_broadcast(&condc);
-        // Release the buffer
-        pthread_mutex_unlock(&queue_mutex);
-        // Sleep for 100 milliseconds
-        usleep(100000);
+        pthread_cond_broadcast(&condc); // Wake up the consumers
+        pthread_mutex_unlock(&queue_mutex); // Unlock the buffer
+        usleep(100000); // Sleep for 100 milliseconds
     }
     pthread_exit(0);
 }
@@ -222,31 +234,42 @@ void *producer(int *id) {
 void *consumer(int *id) {
     int i;
     
+    // Keep consuming until the max number of products has been consumed
     while (num_consumed < max_num_prod) {
-        pthread_mutex_lock(&queue_mutex);
+        pthread_mutex_lock(&queue_mutex); // Lock the buffer
         
+        // Hold the thread while the queue is empty
         while (queue_size == 0 && num_consumed < max_num_prod)
+            // Wait ont he condition variable condc, which will be signalled
+            // once a product has been inserted into the queue
             pthread_cond_wait(&condc, &queue_mutex);
 
-        double remove_time = getTimeStamp();
-        product removed_prod = removeProd();
-
+        // Check again whether the product goal has been reached before removing a product 
         if (num_consumed < max_num_prod) {
+            // Save the time at which a product was removed from the queue
+            double remove_time = getTimeStamp();
+            // Remove a product from the queue
+            product removed_prod = removeProd();
+
+            // Check whether the product's life is greater than the quantum
             if (removed_prod.life > quantum) {
+                // If so, deduct the quantum from the product's life
                 removed_prod.life = removed_prod.life - quantum;
-                for (i = quantum; i > 0; i--)
-                    fn(10);
+                // Call fn(10) 'quantum' times
+                for (i = quantum; i > 0; i--) fn(10);
 
                 // Update the product's wait_time and insert_time
                 removed_prod.wait_time += remove_time - removed_prod.insert_time;
                 removed_prod.insert_time = getTimeStamp();
 
+                // Insert the product back into the queue
                 insertProd(removed_prod);
             }
             else {
-                for (i = removed_prod.life; i > 0; i--)
-                    fn(10);
+                // If not call fn(10) 'life' times
+                for (i = removed_prod.life; i > 0; i--) fn(10);
                 
+                // Incrememnt the number of products consumed
                 num_consumed++;
 
                 // Update the product's wait_time
@@ -268,12 +291,9 @@ void *consumer(int *id) {
             }
         }
         
-        // Wake up a producer
-        pthread_cond_broadcast(&condp);
-
-        pthread_mutex_unlock(&queue_mutex);
-
-        usleep(100000);
+        pthread_cond_broadcast(&condp); // Wake up the producers
+        pthread_mutex_unlock(&queue_mutex); // Unlock the buffer
+        usleep(100000); // Sleep for 100 milliseconds
     }
     pthread_exit(0);
 }
