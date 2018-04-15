@@ -11,10 +11,10 @@
 #include <errno.h>
 
 // Declare mutex and condition variables
-pthread_mutex_t queue_mutex;
+pthread_mutex_t queue_mutex; // protects the queue
 pthread_cond_t condc, condp;
 
-// Queue variables
+// Queue variables since we only use one queue
 int queue_capacity;
 int queue_size = 0;
 int queue_front = 0;
@@ -36,8 +36,8 @@ typedef struct Product {
 // Declare the queue as an array of products
 product *prod_queue;
 
-// Variables to track stats for turn-around times and wait times
-double min_turn=100000, max_turn=0, total_turn=0,
+// Variables to track stats for ta-around times and wait times
+double min_ta=100000, max_ta=0, total_ta=0,
        min_wait=100000, max_wait=0, total_wait=0;
 
 // The Fibonacchi function
@@ -87,7 +87,7 @@ product createProd() {
 int main(int argc, char* argv[]) {
     // Check that there is a proper amount of parameters
     if (argc != 8) {
-        printf("7 parameters required.\n");
+        printf("%s [# of producers] [# of consumers] [# products] [queue size] [scheduling algorithm (0: FCFS, 1: RR)] [quantum] [seed]\n", argv[0]);
         return -1;
     }
     
@@ -186,9 +186,9 @@ int main(int argc, char* argv[]) {
 
     printf("       Total Time  %f\n\n", total_time);
 
-    printf("Turn-around Times  MIN: %f\n", min_turn);
-    printf("                   MAX: %f\n", max_turn);
-    printf("                   AVG: %f\n\n", total_turn/max_num_prod);
+    printf("Turn-around Times  MIN: %f\n", min_ta);
+    printf("                   MAX: %f\n", max_ta);
+    printf("                   AVG: %f\n\n", total_ta/max_num_prod);
 
     printf("       Wait Times  MIN: %f\n", min_wait);
     printf("                   MAX: %f\n", max_wait);
@@ -210,7 +210,7 @@ void *producer(int *id) {
     while (num_produced < max_num_prod) {
         pthread_mutex_lock(&queue_mutex); // Lock the buffer
         
-        // Hold the thread while the queue is full
+        // Hold the thread while the queue is full 
         while (queue_size == queue_capacity && num_produced < max_num_prod)
             // Wait on the condition variable condp, which will be signalled
             // once a product has been removed from the queue
@@ -238,7 +238,9 @@ void *consumer(int *id) {
     while (num_consumed < max_num_prod) {
         pthread_mutex_lock(&queue_mutex); // Lock the buffer
         
-        // Hold the thread while the queue is empty
+        // Hold the thread while the queue is empty and make sure that
+        // the max_num_prod has not been reached so that the thread
+        // does not wait indefinitely
         while (queue_size == 0 && num_consumed < max_num_prod)
             // Wait ont he condition variable condc, which will be signalled
             // once a product has been inserted into the queue
@@ -274,18 +276,18 @@ void *consumer(int *id) {
 
                 // Update the product's wait_time
                 removed_prod.wait_time += remove_time - removed_prod.insert_time;
-                // Determine the product's turn-around time
-                double turn_time = getTimeStamp() - removed_prod.create_time;
+                // Determine the product's ta-around time
+                double ta_time = getTimeStamp() - removed_prod.create_time;
 
                 // Update wait time stats
                 if (removed_prod.wait_time < min_wait) min_wait = removed_prod.wait_time;
                 if (removed_prod.wait_time > max_wait) max_wait = removed_prod.wait_time;
                 total_wait += removed_prod.wait_time;
 
-                // Update turn-around time stats
-                if (turn_time < min_turn) min_turn = turn_time;
-                if (turn_time > max_turn) max_turn = turn_time;
-                total_turn += turn_time;
+                // Update ta-around time stats
+                if (ta_time < min_ta) min_ta = ta_time;
+                if (ta_time > max_ta) max_ta = ta_time;
+                total_ta += ta_time;
 
                 printf("Consumer %d has consumed product %d.\n", *id, removed_prod.prod_id);
             }
