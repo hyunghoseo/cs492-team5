@@ -43,10 +43,22 @@ typedef struct lfile{
   struct lfile *next;
 } lfile;
 
-typedef struct fileHelp{
-  nodeType type;
-  char *name;
-} node;
+// typedef struct fileHelp{
+//   nodeType type;
+//   char *name;
+// } node;
+/*
+  Each node in the directory tree G is associated with either a regular file or
+  a directory.
+
+  Enum: easier than macros for constant type values.
+*/
+typedef enum{
+  DIR_NODE; //directory node;
+  FILE_NODE; //file node;
+} nodeType; //node in the directory
+
+
 /*
   parse the file_list.txt file.
   The input is the file_list.txt, root is the root node representing the root
@@ -59,9 +71,19 @@ typedef struct fileHelp{
   Need to parse the file_list.txt to retrieve the name and size of each file.
 */
 void parseFileList(FILE* fl, node *root, ldisk *disk, int blockSize){
+  int status1;
+  unsigned long size; //file size;
+  if(fl == NULL){
+    printf("Cannot open file!\n");
+  }
+  else{
+      do{
+        status1 = fscanf(fl, "%s");
+    }while(status1 != -1);
+  }
+  fclose(fl);
   
 }
-
 
 int main(int argc, char *argv[]){
   /*
