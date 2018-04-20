@@ -16,22 +16,7 @@
 /* todo:
     parse file_list.txt for name and siz of each file.
     parse dir_list.txt
-
-    implement user commands:
-      cd - sete specified directory as the current directory
-      cd.. - set parent directory as current directory
-      ls - list all files and sub-directories in current directory
-      mkdir - create a new directory in the current directory
-      create - create a new file in the current directory
-      append - append a number of bytes to the file
-      remove - delete a number of bytes from the file
-      delete - delete the file or directory
-      exit - deallocate data structures and exit program
-      dir - print out director tree branch in breadth-frist order
-      prfiles - print out all file information
-      prdist - print out disk space info
 */
-
 
 /*
   Linked List "Ldisk" of Disk Blocks -
@@ -39,12 +24,12 @@
   (2) The status ("free" or "used")
   (3) the pointer to the next node in Ldisk;
 */
-typedef struct lDisk{
+typedef struct ldisk{
   unsigned long blockId;
   bool status; // used == true, free == false
   unsigned long numBlocks;
-  struct lDisk *next;
-} lDisk;
+  struct ldisk *next;
+} ldisk;
 
 /*
   linked list "Lfile" for storing disk block addresses for a file -
@@ -58,7 +43,77 @@ typedef struct lfile{
   struct lfile *next;
 } lfile;
 
-int main(int argc, char* argv[]){
+typedef struct fileHelp{
+  nodeType type;
+  char *name;
+} node;
+/*
+  parse the file_list.txt file.
+  The input is the file_list.txt, root is the root node representing the root
+  directory. Each node in the directory tree G is associated with either a regular
+  file or directory.
+  ldisk-program should travers Ldisk starting from the first notde looking for the
+  free blocks that can be allocated to the files.
+  blocksize - the blocksize of blocks allocated to the file.
 
+  Need to parse the file_list.txt to retrieve the name and size of each file.
+*/
+void parseFileList(FILE* fl, node *root, ldisk *disk, int blockSize){
+  
+}
+
+
+int main(int argc, char *argv[]){
+  /*
+    Your program must accept the following parameters at the command prompt:
+    -f [input files storing information on files]
+    -d [input files storing information on directories]
+    -s [disk size]
+    -b [block size]
+  */
+  unsigned long diskSize = 0;
+  unsigned long blockSize = 0;
+  FILE *fl; //file_list
+  FILE *dl; //dir_list
+  int c;
+  // Using the getopt argument parsing documentation
+  while((c = getopt(argc,argv, "f:d:s:b:")) != -1)
+    switch(c){
+      // in the case of f, open up existing file for reading purposes
+      case 'f':
+        fl = fopen(optarg, "r");
+        if(fl == NULL){
+          printf("Error opening file, exiting\n");
+          exit(-1);
+        }
+        break;
+      // in the case of d, open up existing file for reading purposes
+      case 'd':
+        dl = fopen(optarg, "r");
+        if(dl == NULL){
+          printf("Error opening file, exiting\n");
+          exit(-1);
+        }
+      case 'b':
+        //block size
+      case 's':
+        //diskSize;
+    }
+    if(!fl){
+      printf(argv[0]);
+      return 1;
+    }
+    else if(!dl) {
+      printf(argv[0]);
+      return 1;
+    }
+    else if(!diskSize) {
+      printf(argv[0]);
+      return 1;
+    }
+    else if(!blockSize) {
+      printf(argv[0]);
+      return 1;
+    }
 
 }
